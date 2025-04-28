@@ -35,36 +35,39 @@ team_t team = {
     ""
 };
 
-/* single word (4) or double word (8) alignment */
-#define ALIGNMENT 8
 
-/* rounds up to the nearest multiple of ALIGNMENT */
-#define ALIGN(size) (((size) + (ALIGNMENT-1)) & ~0x7)
+// 기본 상수
+#define WSIZE 4                // 글자, 헤더, 풋터 크기 4byte
+#define DSIZE 8                // 더블(부동소수점) 글자 크기 8byte
+#define CHUNKSIZE (1<<12)      // 힙 확장을 위한 기본 크기(초기의 빈 블록의 크기)
 
-
-#define SIZE_T_SIZE (ALIGN(sizeof(size_t)))
-
-#define WSIZE 4
-#define DSIZE 8
-#define CHUNKSIZE (1<<12)
-
+// 매크로
 #define MAX(x, y)  ((x) > (y) ? (x) : (y))
 
+// size와 할당 비트를 결합, header와 footer에 저장할 값
 #define PACK(size, alloc)  ((size) | (alloc))
 
+// p가 참조하는 워드 반환(포인터라서 직접 역참조 불가능 -> 타입 캐스팅)
 #define GET(p)        (*(unsigned int *)(p))
+// p에 val 저장
 #define PUT(p, val)   (*(unsigned int *)(p) = (val))
 
+// 사이즈 (~0x7: ...11111000, '&' 연산으로 뒤에 세자리 없어짐)
 #define GET_SIZE(p)   (GET(p) & ~0x7)
+// 할당 상태
 #define GET_ALLOC(p)  (GET(p) & 0x1)
 
+// Header 포인터
 #define HDRP(bp)      ((char *)(bp) - WSIZE)
+// Footer 포인터 (Header의 정보를 참조해서 가져오기 때문에, Header의 정보를 변경했다면 변경된 위치의 Footer가 반환됨에 유의)
 #define FTRP(bp)      ((char *)(bp) + GET_SIZE(HDRP(bp)) - DSIZE)
 
+// 다음 블록의 포인터
 #define NEXT_BLKP(bp) ((char *)(bp) + GET_SIZE(((char *)(bp) - WSIZE)))
+// 이전 블록의 포인터
 #define PREV_BLKP(bp) ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)))
 
-
+// 
 static void *coalesce(void *bp) {
     size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
@@ -145,24 +148,22 @@ static void place(void *bp, size_t asize)
 }
 //////////////
 
-/* 
- * mm_init - initialize the malloc package.
- */
+// mm_init - initialize the malloc package.
+// 힙생성하기, 패딩+프롤로그 헤더+프롤로그 풋터+에필로그 풋터를 담기위해 4워드 크기합을 구성함
+// 생성 후 CHUNKSIZE만큼 추가 메모리를 요청해 힙의 크기를 확장
 int mm_init(void)
 {
-    //int list; 
-    char *heap_listp;
+    char *heap_listp;    // 초기 힙을 생성한다 
 
-    if ((heap_listp = mem_sbrk(4*WSIZE)) == (void *)-1)
+    if ((heap_listp = mem_sbrk(4*WSIZE)) == (void *)-1)    // 4워드 크기의 힙 생성, heap_listp에 힙의 시작 주소값 할당
         return -1;
-    PUT(heap_listp, 0);
-    PUT(heap_listp + (1*WSIZE), PACK(DSIZE, 1));
-    PUT(heap_listp + (2*WSIZE), PACK(DSIZE, 1)); /* Prologue footer */
-    PUT(heap_listp + (3*WSIZE), PACK(0, 1)); /* Epilogue header */
+    PUT(heap_listp, 0);                            // 정렬 패딩
+    PUT(heap_listp + (1*WSIZE), PACK(DSIZE, 1));   // 프롤로그 헤더
+    PUT(heap_listp + (2*WSIZE), PACK(DSIZE, 1));   // 프롤로그 풋터
+    PUT(heap_listp + (3*WSIZE), PACK(0, 1));       // 에필로그 헤더(프로그램이 할당한 마지막 블록의 뒤에 위치하며, 블록이 할당되지 않은 상태를 나타냄)
     heap_listp += (2*WSIZE);
 
-    /* Extend the empty heap with a free block of CHUNKSIZE bytes */
-    if (extend_heap(CHUNKSIZE/WSIZE) == NULL)
+    if (extend_heap(CHUNKSIZE/WSIZE) == NULL)      // free블록으로 빈 힙을 CHUNKSIZE bytes로 확장
         return -1;
     return 0;
 }
@@ -173,15 +174,6 @@ int mm_init(void)
  */
 void *mm_malloc(size_t size)
 {
-    // int newsize = ALIGN(size + SIZE_T_SIZE);
-    // void *p = mem_sbrk(newsize);
-    // if (p == (void *)-1)
-	// return NULL;
-    // else {
-    //     *(size_t *)p = size;
-    //     return (void *)((char *)p + SIZE_T_SIZE);
-    // }
-
     size_t asize;
     size_t extendsize;
     char *bp;
