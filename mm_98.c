@@ -54,7 +54,7 @@ team_t team = {
 #define INITCHUNKSIZE (1<<6)
 #define CHUNKSIZE (1<<12) /* Page size in bytes */
 
-#define LISTLIMIT     20 /* Number of segregated lists */
+#define LISTLIMIT     16 /* Number of segregated lists */
 #define REALLOC_BUFFER  (1<<7) /* Reallocation buffer */
 
 static inline int MAX(int x, int y) { /* Maximum of two numbers */
